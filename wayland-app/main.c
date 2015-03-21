@@ -17,9 +17,9 @@
 
 #include "xdg_shell.h"
 
-static struct wl_compositor *wl_compositor;
-static struct wl_shm *wl_shm;
-static struct xdg_shell *xdg_shell;
+static struct wl_compositor *wl_compositor = NULL;
+static struct wl_shm *wl_shm = NULL;
+static struct xdg_shell *xdg_shell = NULL;
 
 static void global(void *data,
                    struct wl_registry *wl_registry,
@@ -56,8 +56,24 @@ static void ping(void *data, struct xdg_shell *xdg_shell, uint32_t serial)
     xdg_shell_pong(xdg_shell, serial);
 }
 
+static void xs_configure(void *data,
+                      struct xdg_surface *xdg_surface,
+                      int32_t width,
+                      int32_t height,
+                      struct wl_array *states,
+                      uint32_t serial)
+{
+    printf("w = %d, h = %d\n", width, height);
+    xdg_surface_ack_configure(xdg_surface, serial);
+}
+
+static void xs_close(void *data, struct xdg_surface *xdg_surface)
+{
+}
+
 static struct wl_registry_listener registry_listener = {global, global_remove};
 static struct xdg_shell_listener xdg_shell_listener = {ping};
+static struct xdg_surface_listener xdg_surface_listener = {xs_configure, xs_close};
 
 int main(int argc, char **argv)
 {
@@ -67,12 +83,26 @@ int main(int argc, char **argv)
         return 1;
     }
     struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
+    if (wl_registry == NULL) {
+        printf("wl_registry failed\n");
+    }
+
     wl_registry_add_listener(wl_registry, &registry_listener, NULL);
     wl_display_dispatch(wl_display);
+    if (wl_compositor == NULL) {
+        printf("wl_compositor failed\n");
+    }
+    if (wl_shm == NULL) {
+        printf("wl_shm failed\n");
+    }
+    if (xdg_shell == NULL) {
+        printf("xdg_shell failed\n");
+    }
+    xdg_shell_use_unstable_version(xdg_shell, XDG_SHELL_VERSION_CURRENT);
+
     xdg_shell_add_listener(xdg_shell, &xdg_shell_listener, NULL);
 
-    struct wl_surface *wl_surface = wl_compositor_create_surface(wl_compositor);
-    struct xdg_surface *xdg_surface = xdg_shell_get_xdg_surface(xdg_shell, wl_surface);
+
 
     int fd = syscall(SYS_memfd_create, "wayland-app", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     if (fd == -1) {
@@ -86,9 +116,21 @@ int main(int argc, char **argv)
     uint32_t *pixels = mmap(NULL, CAPACITY, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
     for (int32_t w = 0; w < WIDTH; ++w) {
         for (int32_t h = 0; h < HEIGHT; ++h) {
-            pixels[h*HEIGHT+w] = 0xaaaaaaaa;
+            pixels[h*HEIGHT+w] = 0x80FF0000;
         }
     }
+
+    struct wl_surface *wl_surface = wl_compositor_create_surface(wl_compositor);
+    if (wl_surface == NULL) {
+        printf("wl_surface failed\n");
+    }
+    struct xdg_surface *xdg_surface = xdg_shell_get_xdg_surface(xdg_shell, wl_surface);
+    if (xdg_surface == NULL) {
+        printf("xdg_surface failed\n");
+    }
+    xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+    xdg_surface_set_title(xdg_surface, "Hello");
+    xdg_surface_set_window_geometry(xdg_surface, 10, 10, WIDTH, HEIGHT);
     struct wl_shm_pool *wl_shm_pool = wl_shm_create_pool(wl_shm, fd, CAPACITY);
     struct wl_buffer *wl_buffer = wl_shm_pool_create_buffer(wl_shm_pool, 0,
                                                             WIDTH, HEIGHT, STRIDE,
@@ -103,12 +145,12 @@ int main(int argc, char **argv)
 
     wl_buffer_destroy(wl_buffer);
     wl_shm_pool_destroy(wl_shm_pool);
+    xdg_surface_destroy(xdg_surface);
+    wl_surface_destroy(wl_surface);
     munmap(pixels, CAPACITY);
     close(fd);
 
  fd_fail:
-    xdg_surface_destroy(xdg_surface);
-    wl_surface_destroy(wl_surface);
     xdg_shell_destroy(xdg_shell);
     wl_shm_destroy(wl_shm);
     wl_compositor_destroy(wl_compositor);
