@@ -5,16 +5,17 @@
 // Foundation, either version 3 of the License, or (at your option) any later
 // version.
 
+#include <linux/memfd.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <cairo/cairo.h>
+
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
-
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <linux/memfd.h>
-#include <sys/mman.h>
-
 #include "xdg_shell.h"
 
 static struct wl_compositor *wl_compositor = NULL;
@@ -57,13 +58,12 @@ static void ping(void *data, struct xdg_shell *xdg_shell, uint32_t serial)
 }
 
 static void xs_configure(void *data,
-                      struct xdg_surface *xdg_surface,
-                      int32_t width,
-                      int32_t height,
-                      struct wl_array *states,
-                      uint32_t serial)
+                         struct xdg_surface *xdg_surface,
+                         int32_t width,
+                         int32_t height,
+                         struct wl_array *states,
+                         uint32_t serial)
 {
-    printf("w = %d, h = %d\n", width, height);
     xdg_surface_ack_configure(xdg_surface, serial);
 }
 
@@ -114,11 +114,21 @@ int main(int argc, char **argv)
     const int32_t CAPACITY = STRIDE * HEIGHT;
     ftruncate(fd, CAPACITY);
     uint32_t *pixels = mmap(NULL, CAPACITY, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-    for (int32_t w = 0; w < WIDTH; ++w) {
-        for (int32_t h = 0; h < HEIGHT; ++h) {
-            pixels[h*HEIGHT+w] = 0x80FF0000;
-        }
-    }
+    cairo_surface_t *surface;
+    cairo_t *cr;
+    surface = cairo_image_surface_create_for_data((unsigned char *)pixels,
+                                                  CAIRO_FORMAT_ARGB32,
+                                                  WIDTH, HEIGHT, STRIDE);
+    cr = cairo_create(surface);
+    cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.8);
+    cairo_fill(cr);
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_rectangle(cr, 10, 10, 280, 180);
+    cairo_stroke(cr);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
 
     struct wl_surface *wl_surface = wl_compositor_create_surface(wl_compositor);
     if (wl_surface == NULL) {
