@@ -126,7 +126,7 @@ int main(int argc, char **argv)
     clock_gettime(CLOCK_REALTIME, &timespec);
     localtime_r(&timespec.tv_sec, &tm);
     sprintf(buffer, "%02d:%02d:%02d.%ld",
-            tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 10000000);
+            tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 1000000);
 
     cairo_surface_t *surface;
     cairo_t *cr;
@@ -134,9 +134,8 @@ int main(int argc, char **argv)
                                                   CAIRO_FORMAT_ARGB32,
                                                   WIDTH, HEIGHT, STRIDE);
     cr = cairo_create(surface);
-    cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
     cairo_set_source_rgba(cr, 0, 0, 0, 0.8);
-    cairo_fill(cr);
+    cairo_paint(cr);
     cairo_set_line_width(cr, 1);
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_rectangle(cr, 10, 10, 280, 180);
