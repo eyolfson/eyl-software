@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cairo/cairo.h>
@@ -119,6 +120,14 @@ int main(int argc, char **argv)
     const int32_t CAPACITY = STRIDE * HEIGHT;
     ftruncate(fd, CAPACITY);
     uint32_t *pixels = mmap(NULL, CAPACITY, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+    struct timespec timespec;
+    struct tm tm;
+    char buffer[200];
+    clock_gettime(CLOCK_REALTIME, &timespec);
+    localtime_r(&timespec.tv_sec, &tm);
+    sprintf(buffer, "%02d:%02d:%02d.%ld",
+            tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 10000000);
+
     cairo_surface_t *surface;
     cairo_t *cr;
     surface = cairo_image_surface_create_for_data((unsigned char *)pixels,
@@ -137,7 +146,7 @@ int main(int argc, char **argv)
                            CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 13);
     cairo_move_to(cr, 20, 30);
-    cairo_show_text(cr, "App"); 
+    cairo_show_text(cr, buffer); 
 
     cairo_destroy(cr);
     cairo_surface_destroy(surface);
@@ -161,8 +170,9 @@ int main(int argc, char **argv)
     wl_surface_attach(wl_surface, wl_buffer, 0, 0);
     wl_surface_commit(wl_surface);
 
+
     while (1) {
-        wl_display_dispatch(wl_display);
+        wl_display_roundtrip(wl_display);
     }
 
     wl_buffer_destroy(wl_buffer);
