@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     char buffer[200];
     clock_gettime(CLOCK_REALTIME, &timespec);
     localtime_r(&timespec.tv_sec, &tm);
-    sprintf(buffer, "%02d:%02d:%02d.%ld",
+    sprintf(buffer, "%02d:%02d:%02d.%03ld",
             tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 1000000);
 
     cairo_surface_t *surface;
