@@ -98,11 +98,8 @@ int main(int argc, char **argv)
     if (xdg_shell == NULL) {
         printf("xdg_shell failed\n");
     }
-    xdg_shell_use_unstable_version(xdg_shell, XDG_SHELL_VERSION_CURRENT);
-
     xdg_shell_add_listener(xdg_shell, &xdg_shell_listener, NULL);
-
-
+    xdg_shell_use_unstable_version(xdg_shell, XDG_SHELL_VERSION_CURRENT);
 
     int fd = syscall(SYS_memfd_create, "wayland-app", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     if (fd == -1) {
@@ -127,6 +124,13 @@ int main(int argc, char **argv)
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_rectangle(cr, 10, 10, 280, 180);
     cairo_stroke(cr);
+    cairo_select_font_face(cr, "Source Code Pro",
+                           CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 13);
+    cairo_move_to(cr, 20, 30);
+    cairo_show_text(cr, "App"); 
+
     cairo_destroy(cr);
     cairo_surface_destroy(surface);
 
