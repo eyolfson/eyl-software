@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     header.e_ehsize = 64; /* ELF header size in bytes */ 
     header.e_phentsize = 56; /* Program header table entry size */
     header.e_phnum = 1; /* Program header table entry count */
-    header.e_shentsize = 0; /* Section header table entry size */
+    header.e_shentsize = 64; /* Section header table entry size */
     header.e_shnum = 0; /* Section header table entry count */
     header.e_shstrndx = 0; /* Section header string table index */
 
