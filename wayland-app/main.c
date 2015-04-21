@@ -80,6 +80,32 @@ static void xs_close(void *data, struct xdg_surface *xdg_surface)
 {
 }
 
+static void draw(cairo_t *cr)
+{
+    struct timespec timespec;
+    struct tm tm;
+    char buffer[200];
+    clock_gettime(CLOCK_REALTIME, &timespec);
+    localtime_r(&timespec.tv_sec, &tm);
+    sprintf(buffer, "%02d:%02d:%02d.%03ld",
+            tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 1000000);
+
+    /* printf("%s %p\n", buffer, cr); */
+
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.8);
+    cairo_paint(cr);
+    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_rectangle(cr, 10, 10, 280, 180);
+    cairo_stroke(cr);
+    cairo_select_font_face(cr, "Source Code Pro",
+                           CAIRO_FONT_SLANT_NORMAL,
+                           CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 13);
+    cairo_move_to(cr, 20, 30);
+    cairo_show_text(cr, buffer);
+}
+
 static struct wl_registry_listener registry_listener = {global, global_remove};
 static struct xdg_shell_listener xdg_shell_listener = {ping};
 static struct xdg_surface_listener xdg_surface_listener = {xs_configure, xs_close};
@@ -118,37 +144,18 @@ int main(int argc, char **argv)
     const int32_t STRIDE = WIDTH * sizeof(int32_t);
     const int32_t HEIGHT = 200;
     const int32_t CAPACITY = STRIDE * HEIGHT;
-    ftruncate(fd, CAPACITY);
-    uint32_t *pixels = mmap(NULL, CAPACITY, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-    struct timespec timespec;
-    struct tm tm;
-    char buffer[200];
-    clock_gettime(CLOCK_REALTIME, &timespec);
-    localtime_r(&timespec.tv_sec, &tm);
-    sprintf(buffer, "%02d:%02d:%02d.%03ld",
-            tm.tm_hour, tm.tm_min, tm.tm_sec, timespec.tv_nsec / 1000000);
+    ftruncate(fd, CAPACITY * 2);
+    uint32_t *pixels = mmap(NULL, CAPACITY * 2, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
 
-    cairo_surface_t *surface;
-    cairo_t *cr;
-    surface = cairo_image_surface_create_for_data((unsigned char *)pixels,
-                                                  CAIRO_FORMAT_ARGB32,
-                                                  WIDTH, HEIGHT, STRIDE);
-    cr = cairo_create(surface);
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.8);
-    cairo_paint(cr);
-    cairo_set_line_width(cr, 1);
-    cairo_set_source_rgb(cr, 1, 1, 1);
-    cairo_rectangle(cr, 10, 10, 280, 180);
-    cairo_stroke(cr);
-    cairo_select_font_face(cr, "Source Code Pro",
-                           CAIRO_FONT_SLANT_NORMAL,
-                           CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 13);
-    cairo_move_to(cr, 20, 30);
-    cairo_show_text(cr, buffer); 
+    cairo_surface_t *surface_1 = cairo_image_surface_create_for_data(
+        (unsigned char *)pixels,
+        CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT, STRIDE);
+    cairo_surface_t *surface_2 = cairo_image_surface_create_for_data(
+        (unsigned char *)pixels + CAPACITY,
+        CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT, STRIDE);
 
-    cairo_destroy(cr);
-    cairo_surface_destroy(surface);
+    cairo_t *cr_1 = cairo_create(surface_1);
+    cairo_t *cr_2 = cairo_create(surface_2);
 
     struct wl_surface *wl_surface = wl_compositor_create_surface(wl_compositor);
     if (wl_surface == NULL) {
@@ -161,20 +168,40 @@ int main(int argc, char **argv)
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
     xdg_surface_set_title(xdg_surface, "Hello");
     xdg_surface_set_window_geometry(xdg_surface, 10, 10, WIDTH, HEIGHT);
-    struct wl_shm_pool *wl_shm_pool = wl_shm_create_pool(wl_shm, fd, CAPACITY);
-    struct wl_buffer *wl_buffer = wl_shm_pool_create_buffer(wl_shm_pool, 0,
-                                                            WIDTH, HEIGHT, STRIDE,
-                                                            WL_SHM_FORMAT_ARGB8888);
+    struct wl_shm_pool *wl_shm_pool = wl_shm_create_pool(wl_shm, fd, CAPACITY * 2);
+    struct wl_buffer *wl_buffer_1 = wl_shm_pool_create_buffer(wl_shm_pool, 0,
+                                                              WIDTH, HEIGHT, STRIDE,
+                                                              WL_SHM_FORMAT_ARGB8888);
+    struct wl_buffer *wl_buffer_2 = wl_shm_pool_create_buffer(wl_shm_pool, CAPACITY,
+                                                              WIDTH, HEIGHT, STRIDE,
+                                                              WL_SHM_FORMAT_ARGB8888);
 
-    wl_surface_attach(wl_surface, wl_buffer, 0, 0);
-    wl_surface_commit(wl_surface);
 
 
+    cairo_t* current_cr = cr_1;
+    struct wl_buffer* current_wl_buffer = wl_buffer_1;
     while (1) {
+        draw(current_cr);
+        wl_surface_attach(wl_surface, current_wl_buffer, 0, 0);
+        wl_surface_commit(wl_surface);
+        wl_surface_damage(wl_surface, 0, 0, WIDTH, HEIGHT);
+        if (current_cr == cr_1) {
+            current_cr = cr_2;
+            current_wl_buffer = wl_buffer_2;
+        }
+        else {
+            current_cr = cr_1;
+            current_wl_buffer = wl_buffer_1;
+        }
         wl_display_roundtrip(wl_display);
     }
 
-    wl_buffer_destroy(wl_buffer);
+    cairo_destroy(cr_2);
+    cairo_surface_destroy(surface_2);
+    cairo_destroy(cr_1);
+    cairo_surface_destroy(surface_1);
+    wl_buffer_destroy(wl_buffer_2);
+    wl_buffer_destroy(wl_buffer_1);
     wl_shm_pool_destroy(wl_shm_pool);
     xdg_surface_destroy(xdg_surface);
     wl_surface_destroy(wl_surface);
